@@ -10,13 +10,14 @@ import TextLink from '@/components/TextLink';
 import useApi from '@/hooks/use-api';
 import useErrorHandler from '@/hooks/use-error-handler';
 import useGlobalRedirectTo from '@/hooks/use-global-redirect-to';
+import ErrorPage from '@/pages/ErrorPage';
 import Button from '@/shared/components/Button';
 
 import OrganizationSelector, { type Organization } from './OrganizationSelector';
 import ScopesListCard from './ScopesListCard';
 import UserProfile from './UserProfile';
 import styles from './index.module.scss';
-import { getRedirectUriOrigin } from './util';
+import { getRedirectUriOrigin, isOidcAccessDeniedError } from './util';
 
 const Consent = () => {
   const handleError = useErrorHandler();
@@ -26,10 +27,24 @@ const Consent = () => {
 
   const [consentData, setConsentData] = useState<ConsentInfoResponse>();
   const [selectedOrganization, setSelectedOrganization] = useState<Organization>();
+  const [isAccessDenied, setIsAccessDenied] = useState(false);
 
   const [isConsentLoading, setIsConsentLoading] = useState(false);
 
   const asyncGetConsentInfo = useApi(getConsentInfo);
+
+  const handleConsentError = useCallback(
+    async (error: unknown) => {
+      if (await isOidcAccessDeniedError(error)) {
+        setIsAccessDenied(true);
+
+        return;
+      }
+
+      await handleError(error);
+    },
+    [handleError]
+  );
 
   const consentHandler = useCallback(async () => {
     setIsConsentLoading(true);
@@ -37,7 +52,7 @@ const Consent = () => {
     setIsConsentLoading(false);
 
     if (error) {
-      await handleError(error);
+      await handleConsentError(error);
 
       return;
     }
@@ -45,14 +60,14 @@ const Consent = () => {
     if (result?.redirectTo) {
       await redirectTo(result.redirectTo);
     }
-  }, [asyncConsent, handleError, redirectTo, selectedOrganization?.id]);
+  }, [asyncConsent, handleConsentError, redirectTo, selectedOrganization?.id]);
 
   useEffect(() => {
     const getConsentInfoHandler = async () => {
       const [error, result] = await asyncGetConsentInfo();
 
       if (error) {
-        await handleError(error);
+        await handleConsentError(error);
 
         return;
       }
@@ -68,7 +83,17 @@ const Consent = () => {
     };
 
     void getConsentInfoHandler();
-  }, [asyncGetConsentInfo, handleError]);
+  }, [asyncGetConsentInfo, handleConsentError]);
+
+  if (isAccessDenied) {
+    return (
+      <ErrorPage
+        isNavbarHidden
+        title="error.access_denied"
+        message="error.application_access_denied"
+      />
+    );
+  }
 
   if (!consentData) {
     return null;

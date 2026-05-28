@@ -1,3 +1,6 @@
+import type { RequestErrorBody } from '@logto/schemas';
+import { HTTPError } from 'ky';
+
 /**
  * We need to hide the query params and path from the redirectUri for security reasons when displaying it to the user.
  *
@@ -14,4 +17,18 @@ export const getRedirectUriOrigin = (redirectUri: string) => {
 
   // Otherwise return the original uri. e.g. native schema io.logto://callback
   return redirectUri;
+};
+
+export const isOidcAccessDeniedError = async (error: unknown) => {
+  if (!(error instanceof HTTPError)) {
+    return false;
+  }
+
+  try {
+    const { code } = await error.response.clone().json<RequestErrorBody>();
+
+    return code === 'oidc.access_denied';
+  } catch {
+    return false;
+  }
 };
